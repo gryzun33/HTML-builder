@@ -1,22 +1,29 @@
 const fs = require('fs');
+const readline = require('readline');
 const path = require('path');
 
-const { stdout, stdin, argv, stderr } = process;
+const { stdout, stdin, argv } = process;
 
 const pathToFile = path.join(argv[1], 'text.txt');
-const output = fs.createWriteStream(pathToFile);
+fs.createWriteStream(pathToFile);
 
 stdout.write("Hello? What's the weather like today? \n");
 
-stdin.on('data', (data) => {
-  if (data.toString().trim() === 'exit') {
-    stdout.write('Good Bye!\n');
-    process.exit(0);
-  }
-  output.write(data);
+const rl = readline.createInterface({
+  input: stdin,
+  output: stdout,
 });
 
-process.on('SIGINT', () => {
-  stdout.write('\nGood Bye!\n');
+rl.on('line', (data) => {
+  if (data.toString().trim() === 'exit') {
+    rl.close();
+  }
+  fs.appendFile(pathToFile, data + '\n', (err) => {
+    if (err) throw err;
+  });
+});
+
+rl.on('close', () => {
+  console.log('Good Bye!');
   process.exit(0);
 });

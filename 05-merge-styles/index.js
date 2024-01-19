@@ -1,32 +1,25 @@
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 
 const pathToStylesFolder = path.join(__dirname, 'styles');
-const pathToBundle = path.join(__dirname, 'project-dist', 'bundle.css');
+const pathToBundleCss = path.join(__dirname, 'project-dist', 'bundle.css');
 
-fs.readdir(pathToStylesFolder, { withFileTypes: true }, (err, data) => {
-  if (err) throw err;
-  const dataArray = [];
+fs.readdir(pathToStylesFolder, { withFileTypes: true })
+  .then((data) => {
+    const dataOnlyCss = data.filter(
+      (obj) => obj.isFile() && path.extname(obj.name) === '.css',
+    );
+    const promisesWithData = dataOnlyCss.map((file) =>
+      fs.readFile(path.join(pathToStylesFolder, file.name)),
+    );
 
-  data.forEach((obj) => {
-    if (!obj.isFile() || path.extname(obj.name) !== '.css') {
-      const newData = dataArray.join('\n');
-      fs.writeFile(pathToBundle, newData, (err) => {
-        if (err) throw err;
-      });
-    } else {
-      const pathToCssFile = path.join(pathToStylesFolder, obj.name);
+    return Promise.all(promisesWithData);
+  })
+  .then((newDataArray) => {
+    const newData = newDataArray.join('\n');
 
-      fs.readFile(pathToCssFile, (err, dataFile) => {
-        if (err) throw err;
-
-        dataArray.push(dataFile);
-        const newData = dataArray.join('\n');
-
-        fs.writeFile(pathToBundle, newData, (err) => {
-          if (err) throw err;
-        });
-      });
-    }
+    return fs.writeFile(pathToBundleCss, newData);
+  })
+  .catch((err) => {
+    throw err;
   });
-});

@@ -1,4 +1,4 @@
-const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 
 const pathToTemplate = path.join(__dirname, 'template.html');
@@ -13,107 +13,106 @@ const pathToStylesFile = path.join(pathToDistFolder, 'style.css');
 const pathToAssets = path.join(__dirname, 'assets');
 const pathToDistAssets = path.join(pathToDistFolder, 'assets');
 
-// create folder 'project-dist'
-fs.mkdir(pathToDistFolder, { recursive: true }, (err) => {
-  if (err) throw err;
-
-  fs.readFile(pathToTemplate, (err, templateData) => {
-    if (err) throw err;
-    const strTemplateData = templateData.toString();
-
-    // go to folder 'components'
-    fs.readdir(pathToComponents, { withFileTypes: true }, (err, filesHTML) => {
-      if (err) throw err;
-      const compArray = [];
-      // read content of files
-      filesHTML.forEach((file) => {
-        if (file.isFile() && path.extname(file.name) === '.html') {
-          const pathToFileHTML = path.join(pathToComponents, file.name);
-          const fileName = path.basename(file.name, path.extname(file.name));
-
-          fs.readFile(pathToFileHTML, (err, dataFile) => {
-            if (err) throw err;
-
-            const dataFileStr = dataFile.toString();
-            const obj = {
-              fileName: fileName,
-              dataFile: dataFileStr,
-            };
-
-            compArray.push(obj);
-
-            const newIndexData = compArray.reduce(
-              (res, ob) => res.replace(`{{${ob.fileName}}}`, ob.dataFile),
-              strTemplateData,
-            );
-
-            fs.writeFile(pathToIndex, newIndexData, (err) => {
-              // console.log('newindexdata=', newIndexData);
-              if (err) throw err;
-            });
-          });
-        }
-      });
-    });
+fsPromises
+  .rm(pathToDistFolder, { force: true, recursive: true })
+  .then(() => fsPromises.mkdir(pathToDistFolder, { recursive: true }))
+  .then(() => {
+    replaceTemplate();
+    compileStyles(pathToStylesFolder, pathToStylesFile);
+    copyAssets(pathToAssets, pathToDistAssets);
+  })
+  .catch((err) => {
+    throw err;
   });
 
-  fs.readdir(pathToStylesFolder, { withFileTypes: true }, (err, data) => {
-    if (err) throw err;
-    // console.log('datafromStylesfolder= ', data);
-    if (data.length === 0) {
-      fs.writeFile(pathToStylesFile, '', (err) => {
-        if (err) throw err;
-      });
-    } else if (
-      data.every((obj) => !obj.isFile() || path.extname(obj.name) !== '.css')
-    ) {
-      fs.writeFile(pathToStylesFile, '', (err) => {
-        if (err) throw err;
-      });
-    } else {
-      const dataOnlyCss = data.filter(
-        (obj) => obj.isFile() && path.extname(obj.name) === '.css',
-      );
-      const promisesWithData = dataOnlyCss.map((file) =>
-        fs.promises.readFile(path.join(pathToStylesFolder, file.name)),
+function replaceTemplate() {
+  let strTemplateData;
+  fsPromises
+    .readFile(pathToTemplate)
+    .then((templateData) => {
+      strTemplateData = templateData.toString();
+      return fsPromises.readdir(pathToComponents, { withFileTypes: true });
+    })
+    .then((components) => {
+      const compArray = [];
+
+      const filesHTML = components.filter(
+        (file) => file.isFile() && path.extname(file.name) === '.html',
       );
 
-      // console.log('promises=', promisesWithData);
+      const promisesWithData = filesHTML.map((file) =>
+        fsPromises.readFile(path.join(pathToComponents, file.name)),
+      );
 
+      filesHTML.forEach((file) => {
+        const fileName = path.basename(file.name, path.extname(file.name));
+        const obj = {
+          fileName: fileName,
+        };
+        compArray.push(obj);
+      });
       Promise.all(promisesWithData)
-        .then((newDataArray) => {
-          const newData = newDataArray.join('\n');
-          // console.log('newdata=', newData);
+        .then((dataArray) => {
+          compArray.forEach((obj, i) => {
+            obj.dataFile = dataArray[i].toString();
+          });
 
-          return fs.promises.writeFile(pathToStylesFile, newData);
+          const newIndexData = compArray.reduce(
+            (res, ob) => res.replace(`{{${ob.fileName}}}`, ob.dataFile),
+            strTemplateData,
+          );
+          fsPromises.writeFile(pathToIndex, newIndexData);
         })
         .catch((err) => {
           throw err;
         });
-    }
-  });
+    })
+    .catch((err) => {
+      throw err;
+    });
+}
 
-  copyDir(pathToAssets, pathToDistAssets);
-});
+function compileStyles(pathToStylesFolder, pathToBundleCss) {
+  fsPromises
+    .readdir(pathToStylesFolder, { withFileTypes: true })
+    .then((data) => {
+      const dataOnlyCss = data.filter(
+        (obj) => obj.isFile() && path.extname(obj.name) === '.css',
+      );
+      const promisesWithData = dataOnlyCss.map((file) =>
+        fsPromises.readFile(path.join(pathToStylesFolder, file.name)),
+      );
 
-function copyDir(pathToOldFolder, pathToNewFolder) {
-  fs.mkdir(pathToNewFolder, { recursive: true }, (err) => {
-    if (err) throw err;
+      return Promise.all(promisesWithData);
+    })
+    .then((newDataArray) => {
+      const newData = newDataArray.join('\n');
 
-    fs.readdir(pathToOldFolder, { withFileTypes: true }, (err, files) => {
-      if (err) throw err;
+      return fsPromises.writeFile(pathToBundleCss, newData);
+    })
+    .catch((err) => {
+      throw err;
+    });
+}
 
-      files.forEach((obj) => {
+function copyAssets(pathToOldFolder, pathToNewFolder) {
+  fsPromises
+    .mkdir(pathToNewFolder, { recursive: true })
+    .then(() => fsPromises.readdir(pathToOldFolder, { withFileTypes: true }))
+    .then((data) => {
+      data.forEach((obj) => {
         const pathToOldObj = path.join(pathToOldFolder, obj.name);
         const pathToNewObj = path.join(pathToNewFolder, obj.name);
         if (obj.isFile()) {
-          fs.copyFile(pathToOldObj, pathToNewObj, (err) => {
-            if (err) throw err;
+          fsPromises.copyFile(pathToOldObj, pathToNewObj).catch((err) => {
+            throw err;
           });
-        } else if (obj.isDirectory()) {
-          copyDir(pathToOldObj, pathToNewObj);
+        } else {
+          copyAssets(pathToOldObj, pathToNewObj);
         }
       });
+    })
+    .catch((err) => {
+      throw err;
     });
-  });
 }

@@ -7,7 +7,7 @@ const { stdout, stdin, argv } = process;
 const pathToFile = path.join(argv[1], 'text.txt');
 fs.createWriteStream(pathToFile);
 
-stdout.write("Hello? What's the weather like today? \n");
+stdout.write('Please enter some text: \n');
 
 const rl = readline.createInterface({
   input: stdin,

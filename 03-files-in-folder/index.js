@@ -21,7 +21,8 @@ fs.readdir(
 
         fs.stat(pathToFile, (err, stat) => {
           if (err) throw err;
-          const size = `${+stat.size / 1024}kb`;
+          // console.log('stat=', stat);
+          const size = `${+stat.size} bytes`;
           console.log(`${name} - ${ext} - ${size}`);
         });
       }
